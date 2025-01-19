@@ -37,6 +37,8 @@ def connect():
     threading.Thread(target=listen_for_messages_from_server, args=(client,)).start()
     username_textbox.config(state=tk.DISABLED)
     username_button.config(state=tk.DISABLED)
+    message_textbox.config(state=tk.NORMAL)
+    message_button.config(state=tk.NORMAL)
 
 def send_message():
     message = message_textbox.get()
@@ -75,9 +77,11 @@ username_button.pack(side=tk.LEFT, padx=10)
 
 message_textbox = tk.Entry(bottom_frame, font=FONT, bg=MEDIUM_GREY, fg=WHITE, width=38)
 message_textbox.pack(side=tk.LEFT, padx=10)
+message_textbox.config(state=tk.DISABLED)
 
 message_button = tk.Button(bottom_frame, text="Send", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=send_message)
 message_button.pack(side=tk.LEFT, padx=10)
+message_button.config(state=tk.DISABLED)
 
 message_box = scrolledtext.ScrolledText(middle_frame, font=SMALL_FONT, bg=MEDIUM_GREY, fg=WHITE, width=67, height=26.5)
 message_box.config(state=tk.DISABLED)
