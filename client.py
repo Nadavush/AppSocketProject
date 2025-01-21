@@ -1,8 +1,8 @@
 import socket
 import threading
 import tkinter as tk
-from tkinter import scrolledtext
-from tkinter import messagebox
+from tkinter import scrolledtext, messagebox
+import rsa
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -16,6 +16,7 @@ BUTTON_FONT = ('Helvetica', 15)
 SMALL_FONT = ('Helvetica', 13)
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+public_key = None
 
 def add_message(message):
     message_box.config(state=tk.NORMAL)
@@ -23,17 +24,24 @@ def add_message(message):
     message_box.config(state=tk.DISABLED)
 
 def connect():
+    global public_key
     try:
         client.connect((HOST, PORT))
         print(f"Successfully connected to server {HOST}:{PORT}")
         add_message("[SERVER]: Successfully connected to server")
+        public_key_pem = client.recv(4096)
+        public_key = rsa.PublicKey.load_pkcs1(public_key_pem)
     except:
         messagebox.showerror("Unable to connect to server", f"Unable to connect to host {HOST} and port {PORT}")
+        return
+    
     username = username_textbox.get()
     if(username != ''):
-        client.sendall(username.encode('utf-8'))
+        encrypted_username = rsa.encrypt(username.encode('utf-8'), public_key)
+        client.sendall(encrypted_username)
     else:
         messagebox.showerror("Invalid Username", "Username can't be empty")
+
     threading.Thread(target=listen_for_messages_from_server, args=(client,)).start()
     username_textbox.config(state=tk.DISABLED)
     username_button.config(state=tk.DISABLED)
@@ -43,7 +51,8 @@ def connect():
 def send_message():
     message = message_textbox.get()
     if(message!=''):
-        client.sendall(message.encode('utf-8'))
+        encrypted_message = rsa.encrypt(message.encode('utf-8'), public_key)
+        client.sendall(encrypted_message)
         message_textbox.delete(0, len(message))
     else:
         messagebox.showerror("Error", "Message can't be empty")

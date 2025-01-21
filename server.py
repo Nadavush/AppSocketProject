@@ -1,17 +1,25 @@
 import socket
 import threading
+import rsa
 
 HOST = '127.0.0.1'
 PORT = 1234
 LISTENER_LIMIT = 5
 active_clients = []
 
+(public_key, private_key) = rsa.newkeys(1024)
+
 def listen_for_messages(client, username):
     while True:
-        message = client.recv(2048).decode('utf-8')
-        if(message != ''):
-            final_msg = username + '~' + message
-            send_messages_to_all(final_msg)
+        encrypted_message = client.recv(4096)
+        print(encrypted_message)
+        if encrypted_message:
+            try:
+                decrypted_message = rsa.decrypt(encrypted_message, private_key).decode('utf-8')
+                final_msg = username + '~' + decrypted_message
+                send_messages_to_all(final_msg)
+            except:
+                print("Failed to decrypt the message")
         else:
             print(f"{client}'s message is empty")
 
@@ -23,9 +31,11 @@ def send_messages_to_all(message):
         send_message_to_client(user[1], message)
 
 def client_handler(client):
+    client.sendall(public_key.save_pkcs1())
     while True:
-        username = client.recv(2048).decode('utf-8')
-        if(username != ''):
+        encrypted_username = client.recv(4096)
+        if encrypted_username:
+            username = rsa.decrypt(encrypted_username, private_key).decode('utf-8')
             active_clients.append((username, client))
             prompt_message = f"SERVER~{username} has joined the chat"
             send_messages_to_all(prompt_message)
@@ -45,7 +55,6 @@ def main():
     while True:
         client, address = server.accept()
         print(f"Successfully connected to client {address[0]}:{address[1]}")
-
         threading.Thread(target=client_handler, args=(client,)).start()
 
 if __name__ == '__main__':
