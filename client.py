@@ -48,6 +48,21 @@ def connect():
     message_textbox.config(state=tk.NORMAL)
     message_button.config(state=tk.NORMAL)
 
+def listen_for_messages_from_server(client):
+    while True:
+        try:
+            message = client.recv(2048).decode('utf-8')
+            if message:
+                message_data = json.loads(message)
+                username = message_data["username"]
+                final_msg = message_data["message"]
+                add_message(f"[{username}]: {final_msg}")
+            else:
+                messagebox.showerror("Error", "Message recieved from client is empty")
+        except ConnectionResetError:
+            messagebox.showerror("Error", "Connection was closed by the server")
+            break
+
 def send_message():
     message = message_textbox.get()
     if(message!=''):
@@ -57,6 +72,7 @@ def send_message():
         message_textbox.delete(0, len(message))
     else:
         messagebox.showerror("Error", "Message can't be empty")
+
 
 root = tk.Tk()
 root.geometry("600x600")
@@ -96,22 +112,6 @@ message_button.config(state=tk.DISABLED)
 message_box = scrolledtext.ScrolledText(middle_frame, font=SMALL_FONT, bg=MEDIUM_GREY, fg=WHITE, width=67, height=26.5)
 message_box.config(state=tk.DISABLED)
 message_box.pack(side=tk.TOP)
-
-def listen_for_messages_from_server(client):
-    while True:
-        try:
-            message = client.recv(2048).decode('utf-8')
-            if message:
-                message_data = json.loads(message)
-                username = message_data["username"]
-                final_msg = message_data["message"]
-                add_message(f"[{username}]: {final_msg}")
-            else:
-                messagebox.showerror("Error", "Message recieved from client is empty")
-        except ConnectionResetError:
-            messagebox.showerror("Error", "Connection was closed by the server")
-            break
-
 def main():
     root.mainloop()
 

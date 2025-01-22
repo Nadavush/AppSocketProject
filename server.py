@@ -10,6 +10,20 @@ active_clients = []
 
 (public_key, private_key) = rsa.newkeys(1024)
 
+def client_handler(client):
+    client.sendall(public_key.save_pkcs1())
+    while True:
+        encrypted_username = client.recv(4096)
+        if encrypted_username:
+            username = rsa.decrypt(encrypted_username, private_key).decode('utf-8')
+            active_clients.append((username, client))
+            prompt_message = {"username": "SERVER", "message": f"{username} has joined the chat"}
+            send_messages_to_all(json.dumps(prompt_message))
+            break
+        else:
+            print("Client username is empty")
+    threading.Thread(target=listen_for_messages, args=(client, username)).start()
+
 def listen_for_messages(client, username):
     while True:
         encrypted_message = client.recv(4096)
@@ -35,19 +49,6 @@ def send_messages_to_all(message):
     for user in active_clients:
         send_message_to_client(user[1], message)
 
-def client_handler(client):
-    client.sendall(public_key.save_pkcs1())
-    while True:
-        encrypted_username = client.recv(4096)
-        if encrypted_username:
-            username = rsa.decrypt(encrypted_username, private_key).decode('utf-8')
-            active_clients.append((username, client))
-            prompt_message = {"username": "SERVER", "message": f"{username} has joined the chat"}
-            send_messages_to_all(json.dumps(prompt_message))
-            break
-        else:
-            print("Client username is empty")
-    threading.Thread(target=listen_for_messages, args=(client, username)).start()
 
 def main():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
