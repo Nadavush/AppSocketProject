@@ -17,7 +17,8 @@ BUTTON_FONT = ('Helvetica', 15)
 SMALL_FONT = ('Helvetica', 13)
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-public_key = None
+(client_public_key, client_private_key) = rsa.newkeys(1024)
+server_public_key = None
 
 def add_message(message):
     message_box.config(state=tk.NORMAL)
@@ -25,20 +26,22 @@ def add_message(message):
     message_box.config(state=tk.DISABLED)
 
 def connect():
-    global public_key, client, username
+    global server_public_key, client, username
     try:
         client.connect((HOST, PORT))
         print(f"Successfully connected to server {HOST}:{PORT}")
         add_message("[SERVER]: Successfully connected to server")
-        public_key_pem = client.recv(4096)
-        public_key = rsa.PublicKey.load_pkcs1(public_key_pem)
+        server_public_key_pem = client.recv(4096)
+        server_public_key = rsa.PublicKey.load_pkcs1(server_public_key_pem)
     except:
         messagebox.showerror("Unable to connect to server", f"Unable to connect to host {HOST} and port {PORT}")
         return
     username = username_textbox.get()
     if(username != ''):
-        encrypted_username = rsa.encrypt(username.encode('utf-8'), public_key)
-        client.sendall(encrypted_username)
+        encrypted_info = rsa.encrypt(username.encode('utf-8'), server_public_key)
+        client.sendall(encrypted_info)
+        client.sendall(client_public_key.save_pkcs1())
+
     else:
         messagebox.showerror("Invalid Username", "Username can't be empty")
 
@@ -51,9 +54,13 @@ def connect():
 def listen_for_messages_from_server(client):
     while True:
         try:
-            message = client.recv(2048).decode('utf-8')
-            if message:
-                message_data = json.loads(message)
+            encrypted_message = client.recv(2048)
+            if encrypted_message:
+                try:
+                    decrypted_message = rsa.decrypt(encrypted_message, client_private_key).decode('utf-8')
+                except rsa.pkcs1.DecryptionError:
+                   print("Failed to decrypt the message. The encrypted data or private key might be invalid.")
+                message_data = json.loads(decrypted_message)
                 username = message_data["username"]
                 final_msg = message_data["message"]
                 add_message(f"[{username}]: {final_msg}")
@@ -67,7 +74,7 @@ def send_message():
     message = message_textbox.get()
     if(message!=''):
         message_data = {"username": username, "message":message}
-        encrypted_message = rsa.encrypt(json.dumps(message_data).encode('utf-8'), public_key)
+        encrypted_message = rsa.encrypt(json.dumps(message_data).encode('utf-8'), server_public_key)
         client.sendall(encrypted_message)
         message_textbox.delete(0, len(message))
     else:
@@ -112,6 +119,7 @@ message_button.config(state=tk.DISABLED)
 message_box = scrolledtext.ScrolledText(middle_frame, font=SMALL_FONT, bg=MEDIUM_GREY, fg=WHITE, width=67, height=26.5)
 message_box.config(state=tk.DISABLED)
 message_box.pack(side=tk.TOP)
+
 def main():
     root.mainloop()
 
