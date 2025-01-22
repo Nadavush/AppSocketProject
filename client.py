@@ -3,6 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
 import rsa
+import json
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -24,7 +25,7 @@ def add_message(message):
     message_box.config(state=tk.DISABLED)
 
 def connect():
-    global public_key
+    global public_key, client, username
     try:
         client.connect((HOST, PORT))
         print(f"Successfully connected to server {HOST}:{PORT}")
@@ -34,7 +35,6 @@ def connect():
     except:
         messagebox.showerror("Unable to connect to server", f"Unable to connect to host {HOST} and port {PORT}")
         return
-    
     username = username_textbox.get()
     if(username != ''):
         encrypted_username = rsa.encrypt(username.encode('utf-8'), public_key)
@@ -51,7 +51,8 @@ def connect():
 def send_message():
     message = message_textbox.get()
     if(message!=''):
-        encrypted_message = rsa.encrypt(message.encode('utf-8'), public_key)
+        message_data = {"username": username, "message":message}
+        encrypted_message = rsa.encrypt(json.dumps(message_data).encode('utf-8'), public_key)
         client.sendall(encrypted_message)
         message_textbox.delete(0, len(message))
     else:
@@ -98,16 +99,18 @@ message_box.pack(side=tk.TOP)
 
 def listen_for_messages_from_server(client):
     while True:
-        message = client.recv(2048).decode('utf-8')
-        if(message != ''):
-            username = message.split('~')[0]
-            final_msg = message.split('~')[1]
-
-            add_message(f"[{username}]: {final_msg}")
-        else:
-            messagebox.showerror("Error", "Message recieved from client is empty")
-
-
+        try:
+            message = client.recv(2048).decode('utf-8')
+            if message:
+                message_data = json.loads(message)
+                username = message_data["username"]
+                final_msg = message_data["message"]
+                add_message(f"[{username}]: {final_msg}")
+            else:
+                messagebox.showerror("Error", "Message recieved from client is empty")
+        except ConnectionResetError:
+            messagebox.showerror("Error", "Connection was closed by the server")
+            break
 
 def main():
     root.mainloop()

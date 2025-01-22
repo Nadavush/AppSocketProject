@@ -1,6 +1,7 @@
 import socket
 import threading
 import rsa
+import json
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -12,14 +13,18 @@ active_clients = []
 def listen_for_messages(client, username):
     while True:
         encrypted_message = client.recv(4096)
-        print(encrypted_message)
         if encrypted_message:
             try:
                 decrypted_message = rsa.decrypt(encrypted_message, private_key).decode('utf-8')
-                final_msg = username + '~' + decrypted_message
-                send_messages_to_all(final_msg)
-            except:
-                print("Failed to decrypt the message")
+                message_data = json.loads(decrypted_message)
+                final_msg = {"username": username, "message": message_data["message"]}
+                send_messages_to_all(json.dumps(final_msg))
+            except rsa.pkcs1.DecryptionError:
+              print("Failed to decrypt the message. The encrypted data or private key might be invalid.")
+            except json.JSONDecodeError:
+                 print("The decrypted message is not valid JSON.")
+            except KeyError:
+                  print("The JSON message does not contain the expected key 'message'.")
         else:
             print(f"{client}'s message is empty")
 
@@ -37,8 +42,8 @@ def client_handler(client):
         if encrypted_username:
             username = rsa.decrypt(encrypted_username, private_key).decode('utf-8')
             active_clients.append((username, client))
-            prompt_message = f"SERVER~{username} has joined the chat"
-            send_messages_to_all(prompt_message)
+            prompt_message = {"username": "SERVER", "message": f"{username} has joined the chat"}
+            send_messages_to_all(json.dumps(prompt_message))
             break
         else:
             print("Client username is empty")
