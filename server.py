@@ -20,7 +20,7 @@ def client_handler(client):
             client_public_key = rsa.PublicKey.load_pkcs1(client_public_key_pem)
             active_clients.append((username, client, client_public_key))
             prompt_message = {"username": "SERVER", "message": f"{username} has joined the chat"}
-            send_messages_to_all(json.dumps(prompt_message))
+            send_messages_to_clients(json.dumps(prompt_message), active_clients)
             break
         else:
             print("Client username is empty")
@@ -32,9 +32,22 @@ def listen_for_messages(client):
         if encrypted_message:
             try:
                 decrypted_message = rsa.decrypt(encrypted_message, server_private_key).decode('utf-8')
-                send_messages_to_all(decrypted_message)
+                if(json.loads(decrypted_message)["message"].startswith("/whisper")==False):
+                    send_messages_to_clients(decrypted_message, active_clients)
+                else:
+                    whisper_message = json.loads(decrypted_message)
+                    whisper_targets = whisper_message["message"].split(" ")[1]+","+whisper_message["username"]
+                    whisper_message["message"] = whisper_message["message"].split(" ", 2)[2]
+                    dest_clients = []
+                    for target in whisper_targets.split(","):
+                        dest_client = get_client_by_username(target)
+                        if dest_client:
+                            dest_clients.append(dest_client)
+                        else:
+                            print(f"Client {target} not found.")
+                    send_messages_to_clients(json.dumps(whisper_message), dest_clients)
             except rsa.pkcs1.DecryptionError:
-              print("Failed to decrypt the message. The encrypted data or private key might be invalid.")
+              ("Failed to decrypt the message. The encrypted data or private key might be invalid.")
         else:
             print(f"{client}'s message is empty")
 
@@ -42,9 +55,16 @@ def send_message_to_client(client, message, client_public_key):
     encrypted_message = rsa.encrypt(message.encode('utf-8'), client_public_key)
     client.sendall(encrypted_message)
            
-def send_messages_to_all(message):
-    for user in active_clients:
+def send_messages_to_clients(message, clients):
+    for user in clients:
         send_message_to_client(user[1], message, user[2])
+
+def get_client_by_username(username):
+    result = next((client for client in active_clients if client[0] == username), None)
+    if result:
+        return result
+    else:
+        return None
 
 
 def main():
