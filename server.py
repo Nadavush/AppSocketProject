@@ -4,13 +4,14 @@ import rsa
 import json
 from pymongo import MongoClient
 from datetime import datetime
+import zlib
 
 HOST = '127.0.0.1'
 PORT = 1234
 LISTENER_LIMIT = 5
 active_clients = []
 
-MONGO_URI = "mongodb+srv://ndvgill:NadavPass@messangerapp.75ujm.mongodb.net/"
+MONGO_URI = "mongodb+srv://ndvgill:4XJS6FDkGvkLhavG@messangerapp.75ujm.mongodb.net/"
 mclient = MongoClient(MONGO_URI)
 db = mclient["MessangerApp"]
 messages_collection = db["messages"]
@@ -39,21 +40,22 @@ def client_handler(client):
 
 def listen_for_messages(client):
     while True:
-        encrypted_message = client.recv(4096)
-        if encrypted_message:
+        compressed_encrypted_message = client.recv(4096)
+        if compressed_encrypted_message:
             try:
+                encrypted_message = zlib.decompress(compressed_encrypted_message)
                 decrypted_message = rsa.decrypt(encrypted_message, server_private_key).decode('utf-8')
                 message_data = json.loads(decrypted_message)
                 if message_data["message"].startswith("/history"):
                     username = message_data["username"]
-                    history = messages_collection.find().sort("timestamp", -1).limit(3)
+                    history = messages_collection.find().sort("timestamp", -1).limit(4)
                     history_string = "\n".join([f"{msg['username']}: {msg['message']}" for msg in history])
                     send_message_to_client(
                         client,
                         json.dumps({"username": "SERVER", "message": history_string}),
                         get_client_by_username(username)[2]
                     )
-                elif(message_data["message"].startswith("/whisper")==False):
+                elif not message_data["message"].startswith("/whisper"):
                     send_messages_to_clients(decrypted_message, active_clients)
                 else:
                     whisper_message = message_data
@@ -68,13 +70,19 @@ def listen_for_messages(client):
                             print(f"Client {target} not found.")
                     send_messages_to_clients(json.dumps(whisper_message), dest_clients)
             except rsa.pkcs1.DecryptionError:
-              ("Failed to decrypt the message. The encrypted data or private key might be invalid.")
+              print("Failed to decrypt the message. The encrypted data or private key might be invalid.")
+            except zlib.error:
+                print("Failed to decompress the message. The compressed data might be invalid.")
         else:
             print(f"{client}'s message is empty")
 
 def send_message_to_client(client, message, client_public_key):
-    encrypted_message = rsa.encrypt(message.encode('utf-8'), client_public_key)
-    client.sendall(encrypted_message)
+    try:
+        encrypted_message = rsa.encrypt(message.encode('utf-8'), client_public_key)
+        compressed_encrypted_message = zlib.compress(encrypted_message)
+        client.sendall(compressed_encrypted_message)
+    except Exception as e:
+        print(f"Error sending message to client: {e}")
            
 def send_messages_to_clients(message, clients):
     message_data = json.loads(message)

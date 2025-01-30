@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import scrolledtext, messagebox
 import rsa
 import json
+import zlib  
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -41,7 +42,6 @@ def connect():
         encrypted_info = rsa.encrypt(username.encode('utf-8'), server_public_key)
         client.sendall(encrypted_info)
         client.sendall(client_public_key.save_pkcs1())
-
     else:
         messagebox.showerror("Invalid Username", "Username can't be empty")
 
@@ -54,16 +54,19 @@ def connect():
 def listen_for_messages_from_server(client):
     while True:
         try:
-            encrypted_message = client.recv(2048)
-            if encrypted_message:
+            compressed_encrypted_message = client.recv(4096)
+            if compressed_encrypted_message:
                 try:
+                    encrypted_message = zlib.decompress(compressed_encrypted_message)
                     decrypted_message = rsa.decrypt(encrypted_message, client_private_key).decode('utf-8')
+                    message_data = json.loads(decrypted_message)
+                    username = message_data["username"]
+                    final_msg = message_data["message"]
+                    add_message(f"[{username}]: {final_msg}")
                 except rsa.pkcs1.DecryptionError:
                    print("Failed to decrypt the message. The encrypted data or private key might be invalid.")
-                message_data = json.loads(decrypted_message)
-                username = message_data["username"]
-                final_msg = message_data["message"]
-                add_message(f"[{username}]: {final_msg}")
+                except zlib.error:
+                    print("Failed to decompress the message. The compressed data might be invalid.")
             else:
                 messagebox.showerror("Error", "Message recieved from client is empty")
         except ConnectionResetError:
@@ -74,9 +77,14 @@ def send_message():
     message = message_textbox.get()
     if(message!=''):
         message_data = {"username": username, "message":message}
-        encrypted_message = rsa.encrypt(json.dumps(message_data).encode('utf-8'), server_public_key)
-        client.sendall(encrypted_message)
-        message_textbox.delete(0, len(message))
+        try:
+            encrypted_message = rsa.encrypt(json.dumps(message_data).encode('utf-8'), server_public_key)
+            compressed_encrypted_message = zlib.compress(encrypted_message)
+            client.sendall(compressed_encrypted_message)
+            message_textbox.delete(0, len(message))
+        except Exception as e:
+            print(f"Error sending message: {e}")
+            messagebox.showerror("Error", "Failed to send message. Please try again.")
     else:
         messagebox.showerror("Error", "Message can't be empty")
 
